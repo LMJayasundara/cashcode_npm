@@ -1,7 +1,8 @@
 {
   "name": "cashcode-nodejs",
-  "version": "1.0.0",
+  "version": "1.0.2",
   "description": "CashCode MSM-3024 Bill Validator npm package",
+  "repository": "https://github.com/LMJayasundara/cashcode_npm",
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"

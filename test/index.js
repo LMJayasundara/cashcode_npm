@@ -33,10 +33,6 @@ function getTotal(cash){
         device.on('status', (sts)=>{
             console.log("Status:", sts);
         });
-
-        device.on('noPower', ()=>{
-            console.log("Status:");
-        });
     /* End functions */
 
 
@@ -55,10 +51,6 @@ function getTotal(cash){
 
         device.on("idling", ()=>{
             console.log("Device on idling state");
-        });
-
-        device.on("reject", ()=>{
-            console.log("chash Rejected ");
         });
 
         device.on('cassetteRemoved', ()=>{
@@ -108,6 +100,10 @@ function getTotal(cash){
             } catch (error) {
                 console.log(error.message);
             }
+        });
+
+        device.on("reject", ()=>{
+            console.log("chash Rejected ");
         });
     /* End functions */
 
