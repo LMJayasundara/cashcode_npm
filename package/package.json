@@ -1,0 +1,20 @@
+{
+  "name": "cashcode-nodejs",
+  "version": "1.0.0",
+  "description": "CashCode MSM-3024 Bill Validator npm package",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "CashCode",
+    "Bill",
+    "Validator",
+    "MSM-3024"
+  ],
+  "author": "JMJayasundara (Vega Innovation)",
+  "license": "ISC",
+  "dependencies": {
+    "serialport": "^10.4.0"
+  }
+}
