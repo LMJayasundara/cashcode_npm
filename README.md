@@ -30,6 +30,11 @@ device.on('powerup', function () {
     console.log('Device power up');
 });
 
+// Trigger when device powerdown
+device.on('powerup', function () {
+    console.log('Device power up');
+});
+
 // Trigger when device reset
 device.on('reset', function () {
     console.log('Device reset');

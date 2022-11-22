@@ -1,12 +1,12 @@
 const BillValidator = require('cashcode-nodejs');
 var prvCash = 0;
 
-// boardPort = "COM3";
+boardPort = "COM3";
 const device = new BillValidator({
     baudRate: 19200,
-    autoPort: true,
-    boardKeywordIdentifier: 'FTDI'
-    // path: boardPort
+    // autoPort: true,
+    // boardKeywordIdentifier: 'FTDI'
+    path: boardPort
 });
 
 function getTotal(cash){
