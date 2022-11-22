@@ -49,7 +49,7 @@ class BillValidator extends EventEmitter {
         this.status = null;
         this.isSend = false;
 
-        this.poweron = false;
+        this.opentimer = null;
 
         /* Define bill table */
         this.billTable = [
@@ -101,7 +101,8 @@ class BillValidator extends EventEmitter {
             parity: "none",
             stopBits: 1,
             flowControl: false,
-            autoOpen: false
+            autoOpen: false,
+            openImmediatly: false
         });
 
         /* Pipe custom parser */
@@ -109,6 +110,7 @@ class BillValidator extends EventEmitter {
 
         /* On serial open event. */
         this.port.on('open', function () {
+            clearTimeout(self.opentimer);
             console.log('serial port open');
             if (this.isOpen) {
                 self.onSerialPortOpen();
@@ -122,6 +124,7 @@ class BillValidator extends EventEmitter {
 
         /* On serial close event. */
         this.port.on('close', function () {
+            clearTimeout(self.opentimer);
             console.log('serial port close');
             /* Try to reconnect */
             open();
@@ -133,9 +136,14 @@ class BillValidator extends EventEmitter {
         /* Serial reconnect function */
         function open() {
             self.port.open((error) => {
-                if (!error) return;
-                self.emit('error', error.message);
-                setTimeout(open, 5000);
+                if (!error) {
+                    clearTimeout(self.opentimer);
+                    return;
+                }
+                else{
+                    self.emit('error', error.message);
+                    self.opentimer = setTimeout(open, 5000);
+                }
             })
         }
     }
@@ -249,11 +257,21 @@ class BillValidator extends EventEmitter {
                 self.emit('request', request);
 
                 /* Send command to device. */
-                let response = await self.send(request, timeout);
-                self.emit('response', response);
+                // let response = await self.send(request, timeout)
+                await self.send(request, timeout)
+                .then((response)=>{
+                    self.emit('response', response);
 
-                /* Processing command response. */
-                resolve(self.commands.response(response));
+                    /* Processing command response. */
+                    resolve(self.commands.response(response));
+                })
+                .catch((error)=>{
+                    self.emit('error', error.message);
+                    self.disconnect().then(()=>{
+                        self.connect();
+                    });
+                });
+                
             } catch (error) {
                 self.emit('error', error.message);
                 reject(error);
@@ -261,13 +279,19 @@ class BillValidator extends EventEmitter {
         });
     }
 
-    send(request) {
+    send(request, timeout = 1000) {
         let self = this;
 
         return new Promise(function (resolve, reject) {
+            let timer = null;
+
+            /* Timeout timer handler. */
+            let timerHandler = function () {
+                reject(new Error('Device not powerup'));
+            };
 
             let handler = async function (response) {
-
+                clearTimeout(timer);
                 self.parser.removeListener('data', handler);
 
                 /* Check CRC */
@@ -300,6 +324,7 @@ class BillValidator extends EventEmitter {
             }
             self.parser.once('data', handler);
             self.port.write(request);
+            timer = setTimeout(timerHandler, timeout);
         });
     }
 
