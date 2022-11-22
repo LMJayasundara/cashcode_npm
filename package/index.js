@@ -16,7 +16,6 @@ class getPort{
     async getBoardPortName() {
         return new Promise((resolve, reject) => {
             let self = this;
-            console.log("Checking for port...");
             SerialPort.list().then(function(ports){
                 ports.forEach(function(port){
                     if(port.manufacturer.includes(self.boardKeywordIdentifier)) {

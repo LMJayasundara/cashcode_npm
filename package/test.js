@@ -1,13 +1,19 @@
 const BillValidator = require('./index');
 var prvCash = 0;
 
-boardPort = "COM3";
+// Auto detect port
 const device = new BillValidator({
+    autoPort: true,
     baudRate: 19200,
-    // autoPort: true,
-    // boardKeywordIdentifier: 'FTDI'
-    path: boardPort
+    boardKeywordIdentifier: 'FTDI'
 });
+
+// // Define a port
+// const device = new BillValidator({
+//     baudRate: 19200,
+//     path: "COM3",
+//     autoPort: false // 
+// });
 
 function getTotal(cash){
     prvCash = prvCash + cash;
