@@ -247,7 +247,7 @@ class BillValidator extends EventEmitter {
         });
     }
 
-    execute(command, params = [], timeout = 1000) {
+    execute(command, params = [], timeout = 5000) {
         let self = this;
         return new Promise(async function (resolve, reject) {
             try {
