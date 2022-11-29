@@ -18,10 +18,12 @@ class getPort{
             let self = this;
             SerialPort.list().then(function(ports){
                 ports.forEach(function(port){
-                    if(port.manufacturer.includes(self.boardKeywordIdentifier)) {
-                        self.boardPort = port.path;
-                        clearInterval(self.waitForUsb);
-                        resolve(self.boardPort);
+                    if(port.manufacturer != undefined){
+                        if(port.manufacturer.includes(self.boardKeywordIdentifier)) {
+                            self.boardPort = port.path;
+                            clearInterval(self.waitForUsb);
+                            resolve(self.boardPort);
+                        }
                     }
                 });
             });
