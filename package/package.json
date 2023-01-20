@@ -1,8 +1,8 @@
 {
-  "name": "cashcode-nodejs",
-  "version": "1.0.8",
-  "description": "CashCode MSM-3024 Bill Validator npm package",
-  "repository": "https://github.com/LMJayasundara/cashcode_npm",
+  "name": "cashcode.js",
+  "version": "1.0.0",
+  "description": "CashCode Bill Validator",
+  "repository": "https://github.com/richxcame/cashcode.js",
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
@@ -13,8 +13,8 @@
     "Validator",
     "MSM-3024"
   ],
-  "author": "JMJayasundara (Vega Innovation)",
-  "license": "ISC",
+  "author": "Baygeldi Cholukov <baygeldicolukov@gmail.com>",
+  "license": "MIT",
   "dependencies": {
     "serialport": "^10.4.0"
   }
