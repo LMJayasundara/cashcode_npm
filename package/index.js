@@ -153,9 +153,6 @@ class BillValidator extends EventEmitter {
 		this.port.on('open', function () {
 			clearTimeout(self.opentimer);
 			console.log('serial port open');
-			if (this.isOpen) {
-				self.onSerialPortOpen();
-			}
 		});
 
 		/* On serial error event. */
@@ -216,7 +213,11 @@ class BillValidator extends EventEmitter {
 
 	/* Start device */
 	async start() {
+		let self = this;
 		try {
+			if (this.isOpen) {
+				await self.onSerialPortOpen();
+			}
 			await this.execute(0x34, [0xff, 0xff, 0xff, 0xff, 0xff, 0xff]);
 		} catch (error) {
 			this.emit('error', error.message);
