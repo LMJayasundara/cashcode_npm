@@ -60,7 +60,7 @@ class BillValidator extends EventEmitter {
 		this.opentimer = null;
 
 		/* Define bill table */
-		this.billTable = option.billTable.length
+		this.billTable = option.billTable?.length
 			? option.billTable
 			: [
 					{
