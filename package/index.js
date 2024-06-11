@@ -434,6 +434,11 @@ class BillValidator extends EventEmitter {
                 case 0x1C:
                     this.emit('reject');
                 break;
+
+                /* Default reset the machine */
+                default:
+                    this.reset();
+                break;
             }
             
         }
@@ -484,6 +489,12 @@ class BillValidator extends EventEmitter {
                 case 0x1A:
                     this.emit('hold');
                 break;
+
+                /* Default reset the machine */
+                default:
+                    this.reset();
+                break;
+
             }
         }
         
