@@ -71,41 +71,93 @@ class BillValidator extends EventEmitter {
     }
 
     /* Try to connect to the device */
+    // async connect() {
+    //     try {
+    //         if(this.autoPort){
+    //             if (this.boardKeywordIdentifier == null ) console.log(new Error("boardKeywordIdentifier not defined").message);
+    //             let boardKeywordIdentifier = this.boardKeywordIdentifier;
+    //             this.getPort = new getPort(boardKeywordIdentifier);
+    //             await this.getPort.getBoardPortName().then(async (path)=>{
+    //                 await this.begin(path);
+    //             });
+    //         }
+    //         else{
+    //             if(this.path != null) await this.begin(this.path);
+    //             else console.log(new Error("path not defined").message);
+    //         }
+            
+    //     } catch (error) {
+    //         this.emit('error', error.message);
+    //         throw error;
+    //     }
+    // }
+
     async connect() {
         try {
-            if(this.autoPort){
-                if (this.boardKeywordIdentifier == null ) console.log(new Error("boardKeywordIdentifier not defined").message);
+            if (this.autoPort) {
+                if (this.boardKeywordIdentifier == null) {
+                    console.log(new Error("boardKeywordIdentifier not defined").message);
+                }
                 let boardKeywordIdentifier = this.boardKeywordIdentifier;
                 this.getPort = new getPort(boardKeywordIdentifier);
-                await this.getPort.getBoardPortName().then(async (path)=>{
+                await this.getPort.getBoardPortName().then(async (path) => {
                     await this.begin(path);
                 });
-            }
-            else{
-                if(this.path != null) await this.begin(this.path);
+            } else {
+                if (this.path != null) await this.begin(this.path);
                 else console.log(new Error("path not defined").message);
             }
-            
         } catch (error) {
+            console.error("Connect Error:", error.message);
             this.emit('error', error.message);
-            throw error;
+            // Try reconnecting after a short delay
+            setTimeout(async () => {
+                await this.connect();
+            }, 5000);
         }
     }
 
     /* Disconnect from device */
+    // async disconnect() {
+    //     this.statusTimerStop(); // Stop the status timer if it's running
+
+    //     if (this.port && this.port.isOpen) {
+    //         this.port.close(function (error) {
+    //             if (error) {
+    //                 console.log("Port closed Error: ", error);
+    //             }
+
+    //             this.port = null;
+    //             console.log("Port closed...");
+    //         });
+    //     }
+
+    //     if (this.parser) {
+    //         this.parser.destroy(); // Clean up the parser
+    //         this.parser = null;
+    //     }
+
+    //     this.removeAllListeners(); // Remove all event listeners
+    // }
+
     async disconnect() {
         this.statusTimerStop(); // Stop the status timer if it's running
-
+    
         if (this.port && this.port.isOpen) {
-            await this.close(); // Close the serial port
+            return new Promise((resolve, reject) => {
+                this.port.close((error) => {
+                    if (error) {
+                        console.error("Port closed Error:", error);
+                        reject(error);
+                    } else {
+                        console.log("Port closed...");
+                        this.port = null;
+                        resolve(true);
+                    }
+                });
+            });
         }
-
-        if (this.parser) {
-            this.parser.destroy(); // Clean up the parser
-            this.parser = null;
-        }
-
-        this.removeAllListeners(); // Remove all event listeners
+        return Promise.resolve();
     }
 
     /* Init serial */
@@ -135,17 +187,32 @@ class BillValidator extends EventEmitter {
         });
 
         /* On serial error event. */
-        this.port.on('error', function (error) {
-            self.emit('error', error.message);
-        });
+        // this.port.on('error', function (error) {
+        //     self.emit('error', error.message);
+        // });
+        this.port.on('error', async function (error) {
+            console.error('Serial port error:', error.message);
+            await self.disconnect(); // Ensure cleanup on error
+            setTimeout(async () => {
+                await self.connect(); // Attempt to reconnect after a delay
+            }, 5000); // 5-second delay before reconnecting
+        });        
 
         /* On serial close event. */
-        this.port.on('close', function () {
-            clearTimeout(self.opentimer);
-            console.log('serial port close');
-            /* Try to reconnect */
-            open();
-        });
+        // this.port.on('close', function () {
+        //     clearTimeout(self.opentimer);
+        //     console.log('serial port close');
+        //     /* Try to reconnect */
+        //     open();
+        // });
+
+        this.port.on('close', async function () {
+            console.log('Serial port closed');
+            await self.disconnect(); // Ensure cleanup
+            setTimeout(async () => {
+                await self.connect(); // Attempt to reconnect after a delay
+            }, 5000); // 5-second delay before reconnecting
+        });        
 
         /* Manualy open the serial port */
         open();
@@ -572,7 +639,7 @@ class BillValidator extends EventEmitter {
         let self = this;
 
         return new Promise(function (resolve, reject) {
-            if (self.port.isOpen) {
+            if (self.port && self.port.isOpen) {
                 self.port.close(function (error) {
                     if (error) {
                         reject(error);
