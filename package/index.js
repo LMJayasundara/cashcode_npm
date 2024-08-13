@@ -92,6 +92,22 @@ class BillValidator extends EventEmitter {
         }
     }
 
+    /* Disconnect from device */
+    async disconnect() {
+        this.statusTimerStop(); // Stop the status timer if it's running
+
+        if (this.port && this.port.isOpen) {
+            await this.close(); // Close the serial port
+        }
+
+        if (this.parser) {
+            this.parser.destroy(); // Clean up the parser
+            this.parser = null;
+        }
+
+        this.removeAllListeners(); // Remove all event listeners
+    }
+
     /* Init serial */
     async begin(path) {
         let self = this;
