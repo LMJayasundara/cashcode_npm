@@ -4,27 +4,29 @@ const commands = require('./command');
 const CCNetParser = require('./CCNetParser');
 
 /* getPort class */
-class getPort {
-    constructor(boardKeywordIdentifier, checkingTimeInterval) {
+class getPort{
+    constructor(boardKeywordIdentifier, checkingTimeInterval){
         this.boardPort = '';
         this.boardKeywordIdentifier = boardKeywordIdentifier;
         this.checkingTimeInterval = checkingTimeInterval || 1000;
-        this.waitForUsb = setInterval(this.getBoardPortName.bind(this), this.checkingTimeInterval);
+        this.waitForUsb = setInterval(this.getBoardPortName, this.checkingTimeInterval);
     }
 
+    /* Auto detect device port */
     async getBoardPortName() {
         return new Promise((resolve, reject) => {
-            SerialPort.list().then((ports) => {
-                ports.forEach((port) => {
-                    if (port.manufacturer != undefined) {
-                        if (port.manufacturer.includes(this.boardKeywordIdentifier)) {
-                            this.boardPort = port.path;
-                            clearInterval(this.waitForUsb);
-                            resolve(this.boardPort);
+            let self = this;
+            SerialPort.list().then(function(ports){
+                ports.forEach(function(port){
+                    if(port.manufacturer != undefined){
+                        if(port.manufacturer.includes(self.boardKeywordIdentifier)) {
+                            self.boardPort = port.path;
+                            clearInterval(self.waitForUsb);
+                            resolve(self.boardPort);
                         }
                     }
                 });
-            }).catch(reject);
+            });
         });
     }
 }
@@ -43,13 +45,14 @@ class BillValidator extends EventEmitter {
         this.statusTimer = null;
         this.statusTimerInterval = 1000;
 
-        this.commands = new commands();
+        this.commands = new commands()
 
         this.status = null;
         this.isSend = false;
-        this.opentimer = null;
-        this.isConnecting = false;  // Flag to prevent multiple connections
 
+        this.opentimer = null;
+
+        /* Define bill table */
         this.billTable = [
             { amount: 10, code: 'LKA', enabled: false, security: false },
             { amount: 20, code: 'LKA', enabled: false, security: false },
@@ -59,38 +62,87 @@ class BillValidator extends EventEmitter {
             { amount: 1000, code: 'LKA', enabled: false, security: false }
         ];
 
-        this.info = { model: '', serial: '', asset: '' };
+        /* Define device info */
+        this.info = {
+            model  : '',
+            serial : '',
+            asset  : '',
+        };
     }
 
-    async connect() {
-        if (this.isConnecting) return; // Prevent multiple simultaneous connections
-        this.isConnecting = true;
+    /* Try to connect to the device */
+    // async connect() {
+    //     try {
+    //         if(this.autoPort){
+    //             if (this.boardKeywordIdentifier == null ) console.log(new Error("boardKeywordIdentifier not defined").message);
+    //             let boardKeywordIdentifier = this.boardKeywordIdentifier;
+    //             this.getPort = new getPort(boardKeywordIdentifier);
+    //             await this.getPort.getBoardPortName().then(async (path)=>{
+    //                 await this.begin(path);
+    //             });
+    //         }
+    //         else{
+    //             if(this.path != null) await this.begin(this.path);
+    //             else console.log(new Error("path not defined").message);
+    //         }
+            
+    //     } catch (error) {
+    //         this.emit('error', error.message);
+    //         throw error;
+    //     }
+    // }
 
+    async connect() {
         try {
             if (this.autoPort) {
                 if (this.boardKeywordIdentifier == null) {
                     console.log(new Error("boardKeywordIdentifier not defined").message);
                 }
-                this.getPort = new getPort(this.boardKeywordIdentifier);
-                const path = await this.getPort.getBoardPortName();
-                await this.begin(path);
-            } else if (this.path != null) {
-                await this.begin(this.path);
+                let boardKeywordIdentifier = this.boardKeywordIdentifier;
+                this.getPort = new getPort(boardKeywordIdentifier);
+                await this.getPort.getBoardPortName().then(async (path) => {
+                    await this.begin(path);
+                });
             } else {
-                console.log(new Error("path not defined").message);
+                if (this.path != null) await this.begin(this.path);
+                else console.log(new Error("path not defined").message);
             }
         } catch (error) {
             console.error("Connect Error:", error.message);
             this.emit('error', error.message);
-            setTimeout(() => this.connect(), 5000); // Retry after delay
-        } finally {
-            this.isConnecting = false;
+            // Try reconnecting after a short delay
+            setTimeout(async () => {
+                await this.connect();
+            }, 5000);
         }
     }
 
+    /* Disconnect from device */
+    // async disconnect() {
+    //     this.statusTimerStop(); // Stop the status timer if it's running
+
+    //     if (this.port && this.port.isOpen) {
+    //         this.port.close(function (error) {
+    //             if (error) {
+    //                 console.log("Port closed Error: ", error);
+    //             }
+
+    //             this.port = null;
+    //             console.log("Port closed...");
+    //         });
+    //     }
+
+    //     if (this.parser) {
+    //         this.parser.destroy(); // Clean up the parser
+    //         this.parser = null;
+    //     }
+
+    //     this.removeAllListeners(); // Remove all event listeners
+    // }
+
     async disconnect() {
         this.statusTimerStop(); // Stop the status timer if it's running
-
+    
         if (this.port && this.port.isOpen) {
             return new Promise((resolve, reject) => {
                 this.port.close((error) => {
@@ -105,100 +157,196 @@ class BillValidator extends EventEmitter {
                 });
             });
         }
-
         return Promise.resolve();
     }
 
+    /* Init serial */
     async begin(path) {
-        if (this.port && this.port.isOpen) {
-            await this.disconnect();
-        }
-
+        let self = this;
         this.port = new SerialPort({
-            path,
+            path: path,
             baudRate: this.baudRate,
             dataBits: 8,
             parity: "none",
             stopBits: 1,
             flowControl: false,
-            autoOpen: false
+            autoOpen: false,
+            openImmediatly: false
         });
 
+        /* Pipe custom parser */
         this.parser = this.port.pipe(new CCNetParser());
 
-        this.port.on('open', () => {
-            clearTimeout(this.opentimer);
+        /* On serial open event. */
+        this.port.on('open', function () {
+            clearTimeout(self.opentimer);
             console.log('serial port open');
-            this.onSerialPortOpen();
+            if (this.isOpen) {
+                self.onSerialPortOpen();
+            }
         });
 
-        this.port.on('error', async (error) => {
+        /* On serial error event. */
+        // this.port.on('error', function (error) {
+        //     self.emit('error', error.message);
+        // });
+        this.port.on('error', async function (error) {
             console.error('Serial port error:', error.message);
-            await this.disconnect();
-            setTimeout(() => this.connect(), 5000); // Retry after delay
-        });
+            await self.disconnect(); // Ensure cleanup on error
+            setTimeout(async () => {
+                await self.connect(); // Attempt to reconnect after a delay
+            }, 5000); // 5-second delay before reconnecting
+        });        
 
-        this.port.on('close', async () => {
+        /* On serial close event. */
+        // this.port.on('close', function () {
+        //     clearTimeout(self.opentimer);
+        //     console.log('serial port close');
+        //     /* Try to reconnect */
+        //     open();
+        // });
+
+        this.port.on('close', async function () {
             console.log('Serial port closed');
-            await this.disconnect();
-            setTimeout(() => this.connect(), 5000); // Retry after delay
-        });
+            await self.disconnect(); // Ensure cleanup
+            setTimeout(async () => {
+                await self.connect(); // Attempt to reconnect after a delay
+            }, 5000); // 5-second delay before reconnecting
+        });        
 
-        const openPort = () => {
-            this.port.open((error) => {
-                if (error) {
-                    this.emit('error', error.message);
-                    this.opentimer = setTimeout(openPort, 5000);
+        /* Manualy open the serial port */
+        open();
+
+        /* Serial reconnect function */
+        function open() {
+            self.port.open((error) => {
+                if (!error) {
+                    clearTimeout(self.opentimer);
+                    return;
                 }
-            });
-        };
-
-        openPort();
-    }
-
-    statusTimerStop() {
-        this.statusTimerEnable = false;
-        clearTimeout(this.statusTimer);
-    }
-
-    async onSerialPortOpen() {
-        this.statusTimerStart();
-    }
-
-    statusTimerStart() {
-        this.statusTimerEnable = true;
-        this.statusTimer = setTimeout(() => this.onStatusTimer(), this.statusTimerInterval);
-    }
-
-    onStatusTimer() {
-        clearInterval(this.statusTimer);
-        if (!this.isOpen) return;
-
-        this.execute(0x33, [0x41])
-            .then(data => {
-                if (this.statusTimerEnable) {
-                    this.statusTimer = setTimeout(() => this.onStatusTimer(), this.statusTimerInterval);
+                else{
+                    self.emit('error', error.message);
+                    self.opentimer = setTimeout(open, 5000);
                 }
-                this.onStatus(data);
             })
-            .catch(error => {
-                if (this.statusTimerEnable) {
-                    this.statusTimer = setTimeout(() => this.onStatusTimer(), this.statusTimerInterval);
-                }
-                console.log("onStatusTimer error:", error.message);
-            });
+        }
     }
 
-    async execute(command, params = [], timeout = 5000) {
+    /* Return port open status */
+    get isOpen() {
+        return this.port.isOpen;
+    }
+
+    /* Device funtion begin */
+
+    /* Reset device */
+    async reset() {
+        try {
+            await this.execute(0x30, [0x41]);
+        } catch (error) {
+            this.emit('error', error.message);
+        }
+        this.emit("reset");
+    }
+
+    /* End device */
+    async end() {
+        try {
+            await this.execute(0x34, [0x00, 0x00, 0x00, 0x00, 0x00, 0x00]);
+        } catch (error) {
+            this.emit('error', error.message);
+        }
+    }
+
+    /* Start device */
+    async start() {
+        try {
+            await this.execute(0x34, [0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF]);
+        } catch (error) {
+            this.emit('error', error.message);
+        }
+    }
+
+    /* Stack device */
+    async stack() {
+        try {
+            await this.execute(0x35);
+        } catch (error) {
+            this.emit('error', error.message);
+        }
+    }
+
+    /* Retrieve device */
+    async retrieve() {
+        try {
+            await this.execute(0x36);
+        } catch (error) {
+            this.emit('error', error.message);
+        }
+    }
+
+    /* Hold device */
+    async hold() {
+        try {
+            await this.execute(0x38);
+        } catch (error) {
+            this.emit('error', error.message);
+        }
+    }
+
+    /* Device funtions end */
+
+    waitStatus(status, timeout = 1000) {
+        /* Linked self */
+        let self = this;
+
+        return new Promise(function (resolve, reject) {
+
+            if (self.status == status) {
+                resolve(true);
+            }
+
+            let timer = null;
+            let timerHandler = function () {
+                clearTimeout(timer);
+
+                /* Unbind event. */
+                self.removeListener('status', handler);
+                reject(new Error('Request timeout').message);
+            };
+
+            let handler = function (primary) {
+                if (primary == status) {
+                    clearTimeout(timer);
+
+                    /* Unbind event. */
+                    self.removeListener('status', handler);
+                    resolve(true);
+                }
+            }
+
+            self.on('status', handler);
+            if (timeout) {
+                timer = setTimeout(timerHandler, timeout);
+            }
+        });
+    }
+
+    execute(command, params = [], timeout = 5000) {
         let self = this;
         return new Promise(async function (resolve, reject) {
             try {
+                /* Preparing command to send. */
                 let request = self.commands.request(command, params);
                 self.emit('request', request);
 
+                /* Send command to device. */
+                // let response = await self.send(request, timeout)
                 await self.send(request, timeout)
                 .then((response)=>{
                     self.emit('response', response);
+
+                    /* Processing command response. */
                     resolve(self.commands.response(response));
                 })
                 .catch((error)=>{
@@ -215,12 +363,13 @@ class BillValidator extends EventEmitter {
         });
     }
 
-    async send(request, timeout = 1000) {
+    send(request, timeout = 1000) {
         let self = this;
 
         return new Promise(function (resolve, reject) {
             let timer = null;
 
+            /* Timeout timer handler. */
             let timerHandler = function () {
                 reject(new Error('Device not powerup'));
             };
@@ -229,10 +378,12 @@ class BillValidator extends EventEmitter {
                 clearTimeout(timer);
                 self.parser.removeListener('data', handler);
 
+                /* Check CRC */
                 let ln = response.length;
                 let check = response.slice(ln - 2, ln);
                 let slice = response.slice(0, ln - 2);
 
+                /* Check response CRC */
                 if (check.toString('hex') !== (self.commands.getCRC16(slice)).toString('hex')) {
                     self.isSend = false;
                     reject(new Error('Wrong response data hash').message);
@@ -240,19 +391,21 @@ class BillValidator extends EventEmitter {
 
                 let data = response.slice(3, ln - 2);
 
+                /* Check response type */
                 if (data.length == 1 && data[0] == 0x00) {
-                    // ACK
+                    /* Response receive as ACK */
                 } else if (data.length == 1 && data[0] == 0xFF) {
-                    // NAK
+                    /* Response receive as NAK */
                     reject(new Error('Wrong request data hash').message);
                 } else {
-                    // Send ACK
+                    /* Send ACK */
+                    // self.execute(0x00);
                 }
 
                 self.isSend = true;
                 resolve(data);
-            }
 
+            }
             self.parser.once('data', handler);
             self.port.write(request);
             timer = setTimeout(timerHandler, timeout);
@@ -288,15 +441,29 @@ class BillValidator extends EventEmitter {
     }
 
     async init() {
+        /* Begin device init */
         try {
+            /* Wait "Initial" status */
             await this.waitStatus('13', 1000);
 
+            /* Stop poll-ack */
             this.statusTimerStop();
 
+            // /* Get bill type description */
+            // this.billTable = this.Getbilltype(await this.execute(0x41));
+            // console.log("billTable: ", this.billTable);
+
+            /* Set device security */
             await this.execute(0x32, [0x00, 0x00, 0x00]);
 
+            // /* Get identification */
+            // this.info =  this.Getinfo(await this.execute(0x37));
+            // console.log("Info:", this.info);
+
+            /* Enable bill types */
             await this.execute(0x34, [0xFF, 0XFF, 0XFF, 0xFF, 0XFF, 0XFF])
                 .then(() => {
+                    /* Start poll-ack */
                     setTimeout(() => {
                         this.statusTimerStart();
                     }, 3000);
@@ -308,6 +475,19 @@ class BillValidator extends EventEmitter {
         }
     }
 
+    async onSerialPortOpen() {
+        /* Start poll-ack */
+        this.statusTimerStart();
+    }
+
+    /* Status stop func */
+    statusTimerStop() {
+        this.statusTimerEnable = false;
+        clearTimeout(this.statusTimer);
+    }
+
+
+    /* Check status */
     async onStatus(status) {
         if (status.length >= 2) {
 
@@ -316,24 +496,29 @@ class BillValidator extends EventEmitter {
             this.emit('status', this.status, this.secondStatus);
 
             switch (status[0]) {
+                /* Escrow position */
                 case 0x80:
                     this.emit('escrow', this.billTable[parseInt(status[1].toString(10))]);
                 break;
 
+                /* Bill stacked */
                 case 0x81:
                     this.emit('stacked', this.billTable[parseInt(status[1].toString(10))]);
                     this.execute(0x00);
                 break;
 
+                /* Returned */
                 case 0x82:
                     this.emit('returned', this.billTable[parseInt(status[1].toString(10))]);
                     this.execute(0x00);
                 break;
 
+                /* Reject */
                 case 0x1C:
                     this.emit('reject');
                 break;
 
+                /* Default reset the machine */
                 default:
                     this.reset();
                 break;
@@ -346,40 +531,49 @@ class BillValidator extends EventEmitter {
             this.emit('status', this.status, '');
 
             switch (status[0]) {    
+                /* Power Up */
                 case 0x10:
                     this.emit("powerup");
                     await this.reset();
                 break;
     
+                /* Initialize */
                 case 0x13:
                     this.emit("initialize");
                     await this.init();
                 break;
     
+                /* Idling */
                 case 0x14:
                     this.emit("idling");
                 break;
 
+                /* Accepting */
                 case 0x15:
                     this.emit('accepting');
                 break;
     
+                /* Disabled */
                 case 0x19:
                     this.emit('disabled');
                 break;
 
+                /* Cassette removed */
                 case 0x41:
                     this.emit('cassetteFull');
                 break;
 
+                /* Cassette removed */
                 case 0x42:
                     this.emit('cassetteRemoved');
                 break;
 
+                /* Holding */
                 case 0x1A:
                     this.emit('hold');
                 break;
 
+                /* Default reset the machine */
                 default:
                     this.reset();
                 break;
@@ -389,51 +583,58 @@ class BillValidator extends EventEmitter {
         
     }
 
-    waitStatus(status, timeout = 1000) {
+    /* Start status timer */
+    statusTimerStart() {
         let self = this;
+        this.statusTimerEnable = true;
 
-        return new Promise(function (resolve, reject) {
-
-            if (self.status == status) {
-                resolve(true);
-            }
-
-            let timer = null;
-            let timerHandler = function () {
-                clearTimeout(timer);
-                self.removeListener('status', handler);
-                reject(new Error('Request timeout').message);
-            };
-
-            let handler = function (primary) {
-                if (primary == status) {
-                    clearTimeout(timer);
-                    self.removeListener('status', handler);
-                    resolve(true);
-                }
-            }
-
-            self.on('status', handler);
-            if (timeout) {
-                timer = setTimeout(timerHandler, timeout);
-            }
-        });
+        this.statusTimer = setTimeout(function () {
+            self.onStatusTimer();
+        }, this.statusTimerInterval);
     }
 
-    async reset() {
-        try {
-            await this.execute(0x30, [0x41]);
-        } catch (error) {
-            this.emit('error', error.message);
+    /* Event of processing the status timer */
+    onStatusTimer() {
+        let self = this;
+        clearInterval(this.statusTimer);
+
+        if (!this.isOpen) {
+            return;
         }
-        this.emit("reset");
+
+        /* Poll device */
+        this.execute(0x33, [0x41])
+            .then(function (data) {
+                /* Check permission to run. */
+                if (self.statusTimerEnable) {
+                    /* Start status timer. */
+                    self.statusTimer = setTimeout(function () {
+                        self.onStatusTimer();
+                    }, self.statusTimerInterval);
+                }
+
+                /* Send event. */
+                self.onStatus(data);
+            })
+            .catch(function (error) {
+                /* Check permission to run. */
+                if (self.statusTimerEnable) {
+                    /* Start status timer. */
+                    self.statusTimer = setTimeout(function () {
+                        self.onStatusTimer();
+                    }, self.statusTimerInterval);
+                }
+
+                console.log("onStatusTimer error:", error.message);
+            });
     }
 
-    statusTimerStop() {
-        this.statusTimerEnable = false;
-        clearTimeout(this.statusTimer);
+    /* Disconnect from device */
+    async disconnect() {
+        this.close();
     }
 
+    /* Close comport */
     close() {
         let self = this;
 
@@ -451,6 +652,7 @@ class BillValidator extends EventEmitter {
             }
         });
     }
+
 }
 
-module.exports = BillValidator;
+module.exports = BillValidator
