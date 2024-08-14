@@ -52,6 +52,8 @@ class BillValidator extends EventEmitter {
 
         this.opentimer = null;
         this.reconnectInProgress = false;  // Track if reconnect is in progress
+        this.lastEventTime = null;
+        this.debounceInterval = 1000; // 1 second debounce interval
 
         /* Define bill table */
         this.billTable = [
@@ -215,11 +217,25 @@ class BillValidator extends EventEmitter {
         /* Pipe custom parser */
         this.parser = this.port.pipe(new CCNetParser());
 
+        // /* On serial open event. */
+        // this.port.on('open', function () {
+        //     clearTimeout(self.opentimer);
+        //     console.log('serial port open');
+        //     if (this.isOpen) {
+        //         self.onSerialPortOpen();
+        //     }
+        // });
+
         /* On serial open event. */
         this.port.on('open', function () {
+            const now = Date.now();
+            if (self.lastEventTime && now - self.lastEventTime < self.debounceInterval) {
+                return;
+            }
+            self.lastEventTime = now;
             clearTimeout(self.opentimer);
             console.log('serial port open');
-            if (this.isOpen) {
+            if (self.isOpen) {
                 self.onSerialPortOpen();
             }
         });
@@ -244,13 +260,27 @@ class BillValidator extends EventEmitter {
         //     open();
         // });
 
+        // this.port.on('close', async function () {
+        //     console.log('Serial port closed');
+        //     await self.disconnect(); // Ensure cleanup
+        //     setTimeout(async () => {
+        //         await self.connect(); // Attempt to reconnect after a delay
+        //     }, 5000); // 5-second delay before reconnecting
+        // });
+        
+        /* On serial close event. */
         this.port.on('close', async function () {
+            const now = Date.now();
+            if (self.lastEventTime && now - self.lastEventTime < self.debounceInterval) {
+                return;
+            }
+            self.lastEventTime = now;
             console.log('Serial port closed');
             await self.disconnect(); // Ensure cleanup
             setTimeout(async () => {
                 await self.connect(); // Attempt to reconnect after a delay
             }, 5000); // 5-second delay before reconnecting
-        });        
+        });
 
         /* Manualy open the serial port */
         open();
