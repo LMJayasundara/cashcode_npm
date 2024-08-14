@@ -51,6 +51,7 @@ class BillValidator extends EventEmitter {
         this.isSend = false;
 
         this.opentimer = null;
+        this.reconnectInProgress = false;  // Track if reconnect is in progress
 
         /* Define bill table */
         this.billTable = [
@@ -92,13 +93,47 @@ class BillValidator extends EventEmitter {
     //     }
     // }
 
+    // async connect() {
+    //     try {
+    //         if (this.autoPort) {
+    //             if (this.boardKeywordIdentifier == null) {
+    //                 console.log(new Error("boardKeywordIdentifier not defined").message);
+    //             }
+    //             let boardKeywordIdentifier = this.boardKeywordIdentifier;
+    //             this.getPort = new getPort(boardKeywordIdentifier);
+    //             await this.getPort.getBoardPortName().then(async (path) => {
+    //                 await this.begin(path);
+    //             });
+    //         } else {
+    //             if (this.path != null) await this.begin(this.path);
+    //             else console.log(new Error("path not defined").message);
+    //         }
+    //     } catch (error) {
+    //         console.error("Connect Error:", error.message);
+    //         this.emit('error', error.message);
+    //         // Try reconnecting after a short delay
+    //         setTimeout(async () => {
+    //             await this.connect();
+    //         }, 5000);
+    //     }
+    // }
+
     async connect() {
+        if (this.reconnectInProgress) return;  // Prevent multiple reconnect attempts
+
+        this.reconnectInProgress = true;  // Set reconnect flag
         try {
             if (this.autoPort) {
                 if (this.boardKeywordIdentifier == null) {
                     console.log(new Error("boardKeywordIdentifier not defined").message);
                 }
                 let boardKeywordIdentifier = this.boardKeywordIdentifier;
+    
+                // If there is already a port object, ensure it is closed before reconnecting
+                if (this.port && this.port.isOpen) {
+                    await this.disconnect();
+                }
+    
                 this.getPort = new getPort(boardKeywordIdentifier);
                 await this.getPort.getBoardPortName().then(async (path) => {
                     await this.begin(path);
@@ -112,10 +147,13 @@ class BillValidator extends EventEmitter {
             this.emit('error', error.message);
             // Try reconnecting after a short delay
             setTimeout(async () => {
+                this.reconnectInProgress = false;  // Reset flag before retry
                 await this.connect();
             }, 5000);
+        } finally {
+            this.reconnectInProgress = false;  // Ensure flag is reset
         }
-    }
+    }    
 
     /* Disconnect from device */
     // async disconnect() {
